@@ -4,6 +4,7 @@ import wave
 import sys
 import numpy as np
 import pandas as pd
+import glob
 from sklearn.preprocessing import label_binarize
 
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
@@ -21,8 +22,6 @@ class Constants:
         self.available_emotions = np.array(['ang', 'exc', 'neu', 'sad'])
         self.path_to_data = real_path + "/../../data/sessions/"
         self.path_to_features = real_path + "/../../data/features/"
-        self.path_to_yaafe = real_path + "/../../data/yaafe_sessions/"
-        self.path_to_features_yaafe = real_path + "/../../data/yaafe_features/"
         self.sessions = ['Session1', 'Session2', 'Session3', 'Session4', 'Session5']
         self.conf_matrix_prefix = 'iemocap'
         self.framerate = 16000
@@ -147,7 +146,7 @@ def read_iemocap_data(params=Constants()):
         path_to_transcriptions = params.path_to_data + session + '/dialog/transcriptions/'
 
         files = os.listdir(path_to_wav)
-        files = [f[:-4] for f in files]
+        files = [f[:-4] for f in files if f.endswith(".wav")]
         for f in files:           
             wav = get_audio(path_to_wav, f + '.wav')
             transcriptions = get_transcriptions(path_to_transcriptions, f + '.txt')
@@ -163,37 +162,6 @@ def read_iemocap_data(params=Constants()):
                     data.append(e)
     sort_key = get_field(data, "id")
     return np.array(data)[np.argsort(sort_key)]
-
-
-def split_yaafe(yaafe, emotions, params=Constants()):
-    for ie, e in enumerate(emotions):
-        start = e["start"]
-        end = e["end"]
-
-        e["yaafe"] = yaafe[int(start/0.1):int(end/0.1)]
-
-
-def read_iemocap_yaafe(params=Constants()):
-    data = []
-    for session in params.sessions:
-        path_to_yaafe = params.path_to_yaafe + session + "/"
-        path_to_emotions = params.path_to_data + session + "/dialog/EmoEvaluation/"
-        path_to_transcriptions = params.path_to_data + session + "/dialog/transcriptions/"
-
-        files = os.listdir(path_to_yaafe)
-        files = [f[:-4] for f in files]
-        for f in files:
-            yaafe = pd.read_csv(path_to_yaafe + f + ".csv", header=None, skiprows=3, delimiter=';').values
-            transcriptions = get_transcriptions(path_to_transcriptions, f + '.txt')
-            emotions = get_emotions(path_to_emotions, f + '.txt')
-            split_yaafe(yaafe, emotions)
-
-            for ie, e in enumerate(emotions):
-                e['transcription'] = transcriptions[e['id']]
-                if e['emotion'] in params.available_emotions:
-                    data.append(e)
-        print("End " + session)
-    return data
 
 
 ########################################################################################################################
@@ -226,25 +194,6 @@ def get_features(data, params=Constants()):
         x = np.array(x, dtype=float)
         y = np.array(y)
         save_sample(x, y, params.path_to_features + d['id'] + '.csv')
-    return overall, excluded
-
-
-def get_features_yaafe(data, params=Constants()):
-    overall = 0
-    excluded = 0
-    IPy = False
-    if "IPython.display" in sys.modules.keys():
-        from IPython.display import clear_output
-        IPy = True
-    for di, d in enumerate(data):
-        if di % 100 == 0:
-            if IPy:
-                clear_output()
-            print(di, ' out of ', len(data))
-        x = np.array(d["yaafe"], dtype=float)
-        y = np.array([d["emotion"]]*len(d["yaafe"]))
-        overall += x.shape[0]
-        save_sample(x, y, params.path_to_features_yaafe + d['id'] + '.csv')
     return overall, excluded
 
 
@@ -284,7 +233,7 @@ def load_sample(name):
 def get_sample(ids, take_all=False, params=Constants()):
     if take_all:
         files = os.listdir(params.path_to_features)
-        ids = np.sort(list(map(lambda xx: xx[:-4], files)))
+        ids = np.sort([f[:-4] for f in files if f.endswith(".csv")])
     tx = []
     ty = []
     valid_ids = []
@@ -294,23 +243,6 @@ def get_sample(ids, take_all=False, params=Constants()):
             tx.append(np.array(x, dtype=float))
             ty.append(y[0])
             valid_ids.append(i)
-    tx = np.array(tx)
-    ty = np.array(ty)
-    return tx, ty, np.array(valid_ids)
-
-
-def get_sample_yaafe(ids, take_all=False, params=Constants()):
-    if take_all:
-        files = os.listdir(params.path_to_features_yaafe)
-        ids = np.sort(list(map(lambda xx: xx[:-4], files)))
-    tx = []
-    ty = []
-    valid_ids = []
-    for i in ids:
-        x, y = load_sample(params.path_to_features_yaafe + i + '.csv')
-        tx.append(np.array(x, dtype=float))
-        ty.append(y[0])
-        valid_ids.append(i)
     tx = np.array(tx)
     ty = np.array(ty)
     return tx, ty, np.array(valid_ids)
